@@ -17,7 +17,7 @@
 # under the License.
 #
 
-pkg.name: apps/tasks
+pkg.name: apps/mynewt_tasks_lesson
 pkg.type: app
 pkg.description: App which illustrates task scheduling.
 pkg.author: "Brian Giori <briangiori@gmail.com>"
