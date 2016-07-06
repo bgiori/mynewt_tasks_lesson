@@ -35,16 +35,16 @@ void print_double(char*, double n, char*);
 void fake_work_function(int);
 
 /* Task A */
-#define A_TASK_PRIO        (3)
-#define A_STACK_SIZE       OS_STACK_ALIGN(256)
+#define A_TASK_PRIO             (3)
+#define A_STACK_SIZE            OS_STACK_ALIGN(256)
 struct os_task a_task;
 os_stack_t a_stack[A_STACK_SIZE];
 static volatile int a_loops;
 os_time_t a_time_offset = 0;
 
 /* Task B */
-#define B_TASK_PRIO          (2)
-#define B_STACK_SIZE         OS_STACK_ALIGN(256)
+#define B_TASK_PRIO             (2)
+#define B_STACK_SIZE            OS_STACK_ALIGN(256)
 struct os_task b_task;
 os_stack_t b_stack[B_STACK_SIZE];
 static volatile int b_loops;
@@ -64,60 +64,67 @@ os_stack_t timer_stack[TIMER_STACK_SIZE];
 os_stack_t shell_stack[SHELL_TASK_STACK_SIZE];
 
 /* Testing Parameters */
-#define A_DELAY                 (100)
+#define A_DELAY                 (OS_TICKS_PER_SEC/10)
+#define B_DELAY                 (OS_TICKS_PER_SEC*3)
 #define A_LOOP_SIZE             (10000)
-#define B_DELAY                 (3000)
 #define B_LOOP_SIZE             (1000000)
 
-#define VERBOSE (0)
+#define VERBOSE (1)
 
 /* To reset the tasks */
 volatile int restart_a = 0;
 volatile int restart_b = 0;
 
+/**
+ * a_task_handler
+ *
+ * The task function for Task A. Loops through A_LOOP_SIZE
+ * with a delay of time A_DELAY between each full loop.
+ */
 void
 a_task_handler(void *arg)
 {
-    struct os_task *t;
-
     while (1) {
-        t = os_sched_get_current_task();
-        assert(t->t_func == a_task_handler);
         int i;
         for(i = 0; i < A_LOOP_SIZE; ++i) {
             if(restart_a) break;
             ++a_loops;
-            // Simulate doing a noticeable amount of work
+            /* Simulate doing a noticeable amount of work */
             fake_work_function(i);
         }
         if(restart_a) {
             restart_a = 0;
             continue;
         }
-        if(VERBOSE) console_printf("   %s looped\n", t->t_name);
+        if(VERBOSE) {
+            console_printf("   %s looped\n", a_task.t_name);
+        }
         os_time_delay(A_DELAY);
     }
 }
 
+/**
+ * b_task_handler
+ *
+ * The task function for Task B. Loops through B_LOOP_SIZE
+ * with a delay of time B_DELAY between each full loop.
+ */
 void
 b_task_handler(void *arg)
 {
-    struct os_task *t;
-
     while (1) {
-        t = os_sched_get_current_task();
-        assert(t->t_func == b_task_handler);
         int i;
         for(i = 0; i < B_LOOP_SIZE; ++i) {
             if(restart_b) break;
             ++b_loops;
-            // Simulate doing a noticeable amount of work if verbose is off
+            /* Simulate doing a noticeable amount of work if verbose is off */
             if(!VERBOSE) fake_work_function(i);
-            // Print updates if verbose is set. Replaces fake_work_function
+            /* Print updates if verbose is set. Replaces fake_work_function */
             if (VERBOSE && i % 10000 == 0) {
-                console_printf("     %s: %d%% \n", t->t_name, i/10000);
+                console_printf("     %s: %d%% \n", b_task.t_name, i/10000);
             }
         }
+        /* If reset_b is 1, skip the delay */
         if(restart_b) {
             restart_b = 0;
             continue;
@@ -126,15 +133,18 @@ b_task_handler(void *arg)
     }
 }
 
+/**
+ * timer_task_handler
+ *
+ * The task function for Timer Task. Waits 20 seconds then
+ * prints simulation info. Swaps Task A and B's priorities
+ * and runs another 20 second simulation, printing final 
+ * stats after the second run.
+ */
 void
 timer_task_handler(void *arg)
 {
-    struct os_task *t;
-
     while (1) {
-        t = os_sched_get_current_task();
-        assert(t->t_func == timer_task_handler);
-        
         console_printf("   Starting First Simulation...\n");
         /* Wait for tasks to run */
         os_time_delay(OS_TICKS_PER_SEC * TIMER_LENGTH_SEC);
@@ -145,9 +155,10 @@ timer_task_handler(void *arg)
         b_time_offset = b_task.t_run_time;
         
         /* Change Priorities */
-        a_task.t_prio = 2;
+        int tmp = a_task.t_prio;
+        a_task.t_prio = b_task.t_prio;
         os_sched_resort(&a_task);
-        b_task.t_prio = 3;
+        b_task.t_prio = tmp;
         os_sched_resort(&b_task);
 
         /* Reset Tasks */
@@ -277,9 +288,11 @@ main(int argc, char **argv)
 #endif
 
     os_init();
+    
+    /* Init Tasks */
     rc = init_tasks();
     assert(rc == 0);
-    //console_printf("Tasks initialized.");
+    
     os_start();
 
     /* os start should never return. If it does, this should be an error */
